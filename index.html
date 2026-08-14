@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<title>Verzerrung — jede Weltkarte lügt, nur verschieden</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Kartenprojektionen messbar gemacht: Flächen-, Winkel- und Längenverzerrung an jedem Punkt, Tissot-Indikatrizen und der Beweis, dass keine Karte beides zugleich kann." />
+
+<style>
+  :root {
+    --grund: #EFEDE7;
+    --feld:  #FAF9F5;
+    --tief:  #E2DFD5;
+    --linie: #C8C3B4;
+    --tinte: #1B1A16;
+    --leise: #6A6558;
+    --netz:  #B4AE9C;
+    --flaeche: #8C3A2E;   /* zu groß gezeichnet */
+    --winkel:  #2F6B7A;   /* Form verbogen */
+    --treu:    #4A7A3C;   /* stimmt */
+    --schatten: 0 1px 0 rgba(27,26,22,.05), 0 10px 24px -16px rgba(27,26,22,.5);
+    --f-fest: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "DejaVu Sans Mono", monospace;
+    --f-text: -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund: #131210; --feld: #1B1A16; --tief: #0D0C0A; --linie: #322F27;
+      --tinte: #E6E2D6; --leise: #948E7D; --netz: #423D31;
+      --flaeche: #D9705E; --winkel: #5FB6C9; --treu: #7FBF6A;
+      --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
+    }
+  }
+  :root[data-theme="dark"] {
+    --grund: #131210; --feld: #1B1A16; --tief: #0D0C0A; --linie: #322F27;
+    --tinte: #E6E2D6; --leise: #948E7D; --netz: #423D31;
+    --flaeche: #D9705E; --winkel: #5FB6C9; --treu: #7FBF6A;
+    --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--grund); color:var(--tinte);
+    font-family:var(--f-text); font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .blatt { max-width:1160px; margin:0 auto;
+    padding: clamp(20px,4vw,44px) clamp(14px,3vw,28px) 64px;
+    display:flex; flex-direction:column; gap:18px; }
+
+  .marke { font-family:var(--f-fest); font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--leise); display:flex; gap:12px; align-items:center; margin:0; }
+  .marke::after { content:""; flex:1; height:1px; background:var(--linie); }
+  h1 { font-family:var(--f-fest); font-weight:700; font-size:clamp(24px,4.2vw,40px);
+    line-height:1.06; letter-spacing:-.03em; margin:0; text-wrap:balance; }
+  h1 span { color:var(--flaeche); }
+  .vorspann { max-width:70ch; color:var(--leise); margin:0; }
+  .vorspann b { color:var(--tinte); font-weight:600; }
+
+  .leiste { display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    background:var(--feld); border:1px solid var(--linie); padding:9px 11px; box-shadow:var(--schatten); }
+  .kl { font-family:var(--f-fest); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--leise); }
+  button, select, input { font-family:var(--f-fest); font-size:12px; color:var(--tinte); background:var(--grund);
+    border:1px solid var(--linie); border-radius:0; padding:6px 10px; letter-spacing:.03em; }
+  button, select { cursor:pointer; }
+  button:hover, select:hover { border-color:var(--winkel); }
+  button:active { background:var(--tief); }
+  button:disabled { opacity:.45; cursor:default; }
+  button.haupt { background:var(--winkel); border-color:var(--winkel); color:var(--feld); }
+  button[aria-pressed="true"] { background:var(--tief); border-color:var(--winkel); }
+  :focus-visible { outline:2px solid var(--winkel); outline-offset:2px; }
+
+  .kasten { background:var(--feld); border:1px solid var(--linie); box-shadow:var(--schatten);
+    display:flex; flex-direction:column; min-width:0; }
+  .kasten-kopf { display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    padding:8px 11px; border-bottom:1px solid var(--linie); }
+  .kasten-leib { padding:11px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .buehne { display:grid; grid-template-columns: 1fr 320px; gap:18px; align-items:start; }
+  @media (max-width: 900px) { .buehne { grid-template-columns: minmax(0,1fr); } }
+
+  canvas { width:100%; height:auto; display:block; background:var(--tief); border:1px solid var(--linie);
+    cursor:crosshair; touch-action:none; }
+
+  .werte { display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:1px;
+    background:var(--linie); border:1px solid var(--linie); }
+  .wert { background:var(--feld); padding:8px 10px; min-width:0; }
+  .wert .l { font-family:var(--f-fest); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--leise); }
+  .wert .n { font-family:var(--f-fest); font-size:18px; font-variant-numeric:tabular-nums; }
+  .wert .n.gross { color:var(--flaeche); } .wert .n.schief { color:var(--winkel); } .wert .n.treu { color:var(--treu); }
+
+  table.liste { border-collapse:collapse; width:100%; font-family:var(--f-fest); font-size:12px; }
+  table.liste th, table.liste td { border-bottom:1px solid var(--linie); padding:5px 7px; text-align:left; }
+  table.liste th { color:var(--leise); font-weight:400; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  table.liste td.z { text-align:right; font-variant-numeric:tabular-nums; }
+  .gut { color:var(--treu); } .schlecht { color:var(--flaeche); }
+
+  .steckbrief { font-size:13.5px; color:var(--leise); }
+  .steckbrief b { color:var(--tinte); font-weight:600; }
+  .marker { display:inline-block; width:10px; height:10px; vertical-align:-1px; margin-right:5px; border-radius:50%; }
+
+  .noten { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:18px; margin-top:6px; }
+  .noten section { background:var(--feld); border:1px solid var(--linie); padding:12px 14px; box-shadow:var(--schatten); }
+  .noten h3 { font-family:var(--f-fest); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--leise); margin:0 0 6px; font-weight:400; }
+  .noten p { margin:0; font-size:14px; }
+  code { font-family:var(--f-fest); font-size:12.5px; background:var(--tief); padding:1px 4px; }
+  .fuss { color:var(--leise); font-size:13px; border-top:1px solid var(--linie); padding-top:12px; }
+  .fuss a { color:var(--winkel); }
+</style>
+</head>
+<body>
+<main class="blatt">
+
+  <p class="marke">Blatt · Karten</p>
+  <h1>Verzerrung — jede Weltkarte <span>lügt</span>, nur verschieden</h1>
+  <p class="vorspann">
+    Eine Kugel lässt sich nicht ohne Dehnen auf Papier bringen. Jede Projektion muss etwas
+    opfern: <b>Flächen, Winkel oder Entfernungen</b> — und keine kann alles behalten. Hier ist
+    das nicht behauptet, sondern gerechnet: an jedem Punkt der Karte, aus der Ableitung der
+    Abbildung selbst.
+  </p>
+
+  <div class="leiste">
+    <span class="kl">Projektion</span>
+    <select id="projektion" aria-label="Projektion wählen"></select>
+    <span class="kl" style="margin-left:6px">Zeigen</span>
+    <button id="b-tissot" aria-pressed="true">Verzerrungsellipsen</button>
+    <button id="b-farbe" aria-pressed="true">Flächenfehler</button>
+    <button id="b-netz" aria-pressed="true">Gradnetz</button>
+    <span style="flex:1"></span>
+    <button id="b-thema">Ansicht</button>
+  </div>
+
+  <div class="buehne">
+    <div class="kasten">
+      <div class="kasten-kopf">
+        <span class="kl" id="karten-name"></span>
+        <span class="kl" id="karten-lage" style="margin-left:auto"></span>
+      </div>
+      <div class="kasten-leib">
+        <canvas id="karte" width="1040" height="580" aria-label="Weltkarte mit Verzerrungsanzeige"></canvas>
+        <p class="kl" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--leise)">
+          <b style="color:var(--tinte)">Untergrund</b>: je kräftiger rot, desto stärker ist die Fläche
+          dort aufgebläht. <b style="color:var(--tinte)">Ellipsen</b>: was aus einem kleinen Kreis auf
+          der Kugel wird — <span class="marker" style="background:var(--treu)"></span>Kreis geblieben,
+          Winkel stimmen; <span class="marker" style="background:var(--winkel)"></span>zur Ellipse
+          verzogen. Zeiger über die Karte bewegen misst den Punkt.
+        </p>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+      <div class="kasten">
+        <div class="kasten-kopf"><span class="kl">Am Zeiger</span></div>
+        <div class="kasten-leib">
+          <div class="werte">
+            <div class="wert"><div class="l">Ort</div><div class="n" id="w-ort">—</div></div>
+            <div class="wert"><div class="l">Fläche</div><div class="n" id="w-flaeche">—</div></div>
+            <div class="wert"><div class="l">Winkelfehler</div><div class="n" id="w-winkel">—</div></div>
+            <div class="wert"><div class="l">Ost-West · Nord-Süd</div><div class="n" id="w-hk">—</div></div>
+          </div>
+          <p class="steckbrief" id="steckbrief"></p>
+        </div>
+      </div>
+
+      <div class="kasten">
+        <div class="kasten-kopf"><span class="kl">Wie groß etwas erscheint</span></div>
+        <div class="kasten-leib">
+          <table class="liste" id="vergleich">
+            <thead><tr><th>Landmasse</th><th class="z">erscheint</th><th class="z">ist</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="kl" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--leise)">
+            Jeweils im Verhältnis zu Afrika. „Erscheint" ist die tatsächliche Fläche mal dem
+            Flächenfehler dieser Projektion in der Mitte der Landmasse — eine Näherung, die für
+            weit auseinanderliegende Gebiete gut genug ist.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kasten">
+    <div class="kasten-kopf">
+      <span class="kl">Beweis statt Behauptung</span>
+      <button id="b-pruefen" class="haupt" style="margin-left:auto">Prüfen</button>
+    </div>
+    <div class="kasten-leib">
+      <p style="margin:0;color:var(--leise);font-size:14px">
+        Für jede Projektion wird an tausenden Punkten die Ableitung der Abbildung gebildet und
+        daraus gemessen, was sie behauptet zu können: Winkeltreue heißt, dass Ost-West- und
+        Nord-Süd-Maßstab überall gleich sind; Flächentreue heißt, dass ihr Produkt überall
+        eins ist. Zusätzlich wird gegen die geschlossene Formel gerechnet — und geprüft, dass
+        <b>keine</b> Projektion beides zugleich schafft.
+      </p>
+      <table class="liste" id="pruef"><tbody></tbody></table>
+      <p class="kl" id="pruef-fuss">noch nicht geprüft</p>
+    </div>
+  </div>
+
+  <div class="noten">
+    <section>
+      <h3>Warum es nicht geht</h3>
+      <p>
+        Eine Kugel hat Krümmung, ein Blatt Papier nicht. <b>Gauß</b> hat gezeigt, dass sich
+        die Krümmung beim Abwickeln nicht ändern lässt — <i>Theorema egregium</i>. Deshalb ist
+        jede Weltkarte ein Kompromiss, und die Frage ist nie „verzerrt oder nicht", sondern
+        „wo und wie viel".
+      </p>
+    </section>
+    <section>
+      <h3>Was die Ellipsen zeigen</h3>
+      <p>
+        Nimmt man auf der Kugel einen winzigen Kreis, wird daraus auf der Karte eine Ellipse —
+        die <b>Tissot-Indikatrix</b>. Bleibt sie ein Kreis, ist die Abbildung dort winkeltreu.
+        Hat sie überall dieselbe Fläche, ist sie flächentreu. Beides zugleich gibt es nur auf
+        der Kugel selbst.
+      </p>
+    </section>
+    <section>
+      <h3>Warum das zählt</h3>
+      <p>
+        Mercator ist winkeltreu — deshalb steht er auf jedem Seekartentisch und in jeder
+        Navigations-App: Ein konstanter Kurs ist dort eine gerade Linie. Als Weltkarte an der
+        Wand ist er irreführend, weil er hohe Breiten aufbläst. Beides stimmt gleichzeitig.
+      </p>
+    </section>
+  </div>
+
+  <p class="fuss">
+    Eine einzelne HTML-Datei. Kein Build, keine Bibliothek, nichts verlässt den Browser.
+    <span style="display:block;margin-top:8px">
+      Verwandt:
+      <a href="https://ssims437.github.io/plotterblaetter/">Plotterblätter</a> ·
+      <a href="https://ssims437.github.io/redundanz/">Redundanz</a> ·
+      <a href="https://ssims437.github.io/reparatur/">Reparatur</a> ·
+      <a href="https://ssims437.github.io/wuerfel/">Würfel</a> ·
+      <a href="https://ssims437.github.io/rechenwerk/">Rechenwerk</a> ·
+      <a href="https://ssims437.github.io/nachkomma/">Nachkomma</a> ·
+      <a href="https://ssims437.github.io/zeitsprung/">Zeitsprung</a> ·
+      <a href="https://ssims437.github.io/gradtage/">Gradtage</a> ·
+      <a href="https://ssims437.github.io/stimmfuehrung/">Stimmführung</a>
+    </span>
+  </p>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const RAD = Math.PI / 180;
+
+  /* ===================== Projektionen =====================
+     Jede bildet (Länge, Breite) in Grad auf ein Paar dimensionsloser Karten-
+     koordinaten ab. Der Maßstab ist beliebig — für die Verzerrung zählt nur,
+     wie sich die Abbildung lokal verhält. */
+
+  function mollweideTheta(b) {
+    const p = b * RAD;
+    if (Math.abs(Math.abs(p) - Math.PI / 2) < 1e-9) return p;
+    let t = p;
+    for (let i = 0; i < 40; i++) {
+      const d = (2 * t + Math.sin(2 * t) - Math.PI * Math.sin(p)) / (2 + 2 * Math.cos(2 * t));
+      t -= d;
+      if (Math.abs(d) < 1e-12) break;
+    }
+    return t;
+  }
+
+  // Robinson: die Projektion ist als Tabelle definiert, nicht als Formel.
+  const ROBINSON_L = [1,0.9986,0.9954,0.99,0.9822,0.973,0.96,0.9427,0.9216,0.8962,0.8679,0.835,0.7986,0.7597,0.7186,0.6732,0.6213,0.5722,0.5322];
+  const ROBINSON_D = [0,0.062,0.124,0.186,0.248,0.31,0.372,0.434,0.4958,0.5571,0.6176,0.6769,0.7346,0.7903,0.8435,0.8936,0.9394,0.9761,1];
+  function robinsonWert(tab, b) {
+    const x = Math.min(Math.abs(b), 90) / 5;
+    const i = Math.min(Math.floor(x), 17);
+    const t = x - i;
+    return tab[i] + (tab[i + 1] - tab[i]) * t;      // linear zwischen den Stützstellen
+  }
+
+  const PROJEKTIONEN = {
+    mercator: {
+      name: "Mercator", art: "winkeltreu", grenze: 84,
+      f: (l, b) => [l * RAD, Math.log(Math.tan(Math.PI / 4 + b * RAD / 2))],
+      text: "Winkeltreu: jeder Kurs mit festem Winkel ist eine Gerade. Dafür wachsen die Flächen zum Pol hin ins Unermessliche."
+    },
+    platt: {
+      name: "Plattkarte", art: "weder noch", grenze: 90,
+      f: (l, b) => [l * RAD, b * RAD],
+      text: "Die einfachste Abbildung: Länge und Breite direkt als x und y. Weder winkel- noch flächentreu — dafür rechnet es sich mühelos."
+    },
+    peters: {
+      name: "Lambert zylindrisch (Gall-Peters)", art: "flächentreu", grenze: 90,
+      f: (l, b) => [l * RAD, Math.sin(b * RAD)],
+      text: "Flächentreu: jedes Land nimmt den Anteil ein, der ihm zusteht. Dafür werden die Formen zu den Polen hin flachgedrückt."
+    },
+    mollweide: {
+      name: "Mollweide", art: "flächentreu", grenze: 90,
+      f: (l, b) => {
+        const t = mollweideTheta(b);
+        return [(2 * Math.SQRT2 / Math.PI) * (l * RAD) * Math.cos(t), Math.SQRT2 * Math.sin(t)];
+      },
+      text: "Flächentreu auf einer Ellipse. Die Ränder werden schräg — Winkel stimmen nur auf zwei Breitenkreisen."
+    },
+    robinson: {
+      name: "Robinson", art: "Kompromiss", grenze: 90,
+      f: (l, b) => [0.8487 * robinsonWert(ROBINSON_L, b) * (l * RAD),
+                    1.3523 * Math.sign(b || 1) * robinsonWert(ROBINSON_D, b)],
+      text: "Kein Anspruch auf Treue, sondern auf Aussehen: nach Stützstellen entworfen, damit die Welt gefällig wirkt. Alles ist ein bisschen falsch."
+    },
+    azimutal: {
+      name: "Azimutal äquidistant (Nordpol)", art: "längentreu vom Pol", grenze: 89,
+      f: (l, b) => {
+        const r = (90 - b) * RAD;
+        return [r * Math.sin(l * RAD), -r * Math.cos(l * RAD)];
+      },
+      text: "Alle Entfernungen vom Mittelpunkt stimmen — die Grundlage des UN-Emblems. Alles andere verzerrt zunehmend nach außen."
+    }
+  };
+
+  /* Verzerrung aus der Jacobi-Matrix, numerisch differenziert.
+     h = Maßstab entlang des Breitenkreises (Ost-West), k entlang des Meridians
+     (Nord-Süd), Fläche = Determinante. Der Faktor cos(b) rechnet heraus, dass
+     Längengrade zum Pol hin zusammenlaufen. */
+  function verzerrung(f, l, b, h = 1e-5) {
+    const [x1, y1] = f(l + h, b), [x0, y0] = f(l - h, b);
+    const [x3, y3] = f(l, b + h), [x2, y2] = f(l, b - h);
+    const dxdl = (x1 - x0) / (2 * h * RAD), dydl = (y1 - y0) / (2 * h * RAD);
+    const dxdb = (x3 - x2) / (2 * h * RAD), dydb = (y3 - y2) / (2 * h * RAD);
+    const cosb = Math.cos(b * RAD);
+    if (cosb < 1e-9) return null;
+    const skalaOW = Math.hypot(dxdl, dydl) / cosb;
+    const skalaNS = Math.hypot(dxdb, dydb);
+    const flaeche = Math.abs(dxdl * dydb - dxdb * dydl) / cosb;
+    // Halbachsen der Tissot-Ellipse aus der Singulärwertzerlegung der 2x2-Matrix
+    const a11 = dxdl / cosb, a12 = dxdb, a21 = dydl / cosb, a22 = dydb;
+    const E = (a11 * a11 + a12 * a12 + a21 * a21 + a22 * a22) / 2;
+    const F = (a11 * a11 + a21 * a21 - a12 * a12 - a22 * a22) / 2;
+    const G = a11 * a12 + a21 * a22;
+    const wurzel = Math.hypot(F, G);
+    const gross = Math.sqrt(Math.max(0, E + wurzel));
+    const klein = Math.sqrt(Math.max(0, E - wurzel));
+    const winkel = 0.5 * Math.atan2(G, F);
+    // maximale Winkelverzerrung in Grad (0 = winkeltreu)
+    const omega = (gross > 0 && klein > 0)
+      ? 2 * Math.asin(Math.min(1, (gross - klein) / (gross + klein))) / RAD : 180;
+    return { skalaOW, skalaNS, flaeche, gross, klein, winkel, omega };
+  }
+
+  /* ===================== Zeichnen ===================== */
+  let AKTUELL = "mercator";
+  let zeigeTissot = true, zeigeFarbe = true, zeigeNetz = true;
+  let RAHMEN = null;
+  let ZEIGER = { l: 16, b: 48 };            // Startpunkt: Wien
+
+  function grenzenVon(p) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let b = -p.grenze; b <= p.grenze; b += 2) {
+      for (let l = -180; l <= 180; l += 5) {
+        const [x, y] = p.f(l, b);
+        if (!isFinite(x) || !isFinite(y)) continue;
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      }
+    }
+    return { minX, maxX, minY, maxY };
+  }
+
+  function rahmenBerechnen(g, breite, hoehe) {
+    const { minX, maxX, minY, maxY } = g;
+    const rand = 16;
+    const skala = Math.min((breite - 2 * rand) / (maxX - minX), (hoehe - 2 * rand) / (maxY - minY));
+    return {
+      nachX: (x) => rand + (x - minX) * skala + ((breite - 2 * rand) - (maxX - minX) * skala) / 2,
+      nachY: (y) => hoehe - rand - (y - minY) * skala - ((hoehe - 2 * rand) - (maxY - minY) * skala) / 2,
+      skala
+    };
+  }
+
+  function farbeFuer(flaeche, F) {
+    // 1 = neutral, größer = zu groß gezeichnet. Logarithmisch, damit 33-fach noch lesbar bleibt.
+    const t = Math.max(0, Math.min(1, Math.log(flaeche) / Math.log(20)));
+    const alpha = 0.06 + t * 0.5;
+    return F("--flaeche").trim() + Math.round(alpha * 255).toString(16).padStart(2, "0");
+  }
+
+  function zeichnen() {
+    const c = $("karte"), g = c.getContext("2d");
+    const stil = getComputedStyle(document.documentElement);
+    const F = (n) => stil.getPropertyValue(n);
+    const p = PROJEKTIONEN[AKTUELL];
+    // Die Leinwand bekommt das Seitenverhältnis der Projektion — sonst steht eine
+    // fast quadratische Karte wie Mercator als schmaler Streifen in der Breite.
+    const g0 = grenzenVon(p);
+    const B = c.width;
+    const H = Math.round(Math.max(360, Math.min(980, B * (g0.maxY - g0.minY) / (g0.maxX - g0.minX))));
+    if (c.height !== H) c.height = H;
+    RAHMEN = rahmenBerechnen(g0, B, H);
+
+    g.clearRect(0, 0, B, H);
+    g.fillStyle = F("--tief").trim();
+    g.fillRect(0, 0, B, H);
+
+    // Flächenfehler als Fläche einfärben
+    if (zeigeFarbe) {
+      const schritt = 5;
+      for (let b = -p.grenze; b < p.grenze; b += schritt) {
+        for (let l = -180; l < 180; l += schritt) {
+          const v = verzerrung(p.f, l + schritt / 2, b + schritt / 2);
+          if (!v) continue;
+          const ecken = [[l, b], [l + schritt, b], [l + schritt, b + schritt], [l, b + schritt]]
+            .map(([ll, bb]) => p.f(ll, Math.max(-p.grenze, Math.min(p.grenze, bb))));
+          if (ecken.some(([x, y]) => !isFinite(x) || !isFinite(y))) continue;
+          g.fillStyle = farbeFuer(v.flaeche, F);
+          g.beginPath();
+          ecken.forEach(([x, y], i) => {
+            const px = RAHMEN.nachX(x), py = RAHMEN.nachY(y);
+            i ? g.lineTo(px, py) : g.moveTo(px, py);
+          });
+          g.closePath(); g.fill();
+        }
+      }
+    }
+
+    // Gradnetz
+    if (zeigeNetz) {
+      g.strokeStyle = F("--netz").trim(); g.lineWidth = 1;
+      for (let l = -180; l <= 180; l += 30) {
+        g.beginPath();
+        for (let b = -p.grenze; b <= p.grenze; b += 1) {
+          const [x, y] = p.f(l, b);
+          if (!isFinite(x) || !isFinite(y)) continue;
+          const px = RAHMEN.nachX(x), py = RAHMEN.nachY(y);
+          b === -p.grenze ? g.moveTo(px, py) : g.lineTo(px, py);
+        }
+        g.stroke();
+      }
+      for (let b = -60; b <= 60; b += 30) {
+        g.beginPath();
+        for (let l = -180; l <= 180; l += 1) {
+          const [x, y] = p.f(l, b);
+          const px = RAHMEN.nachX(x), py = RAHMEN.nachY(y);
+          l === -180 ? g.moveTo(px, py) : g.lineTo(px, py);
+        }
+        g.stroke();
+      }
+      // Äquator kräftiger
+      g.strokeStyle = F("--linie").trim(); g.lineWidth = 1.6;
+      g.beginPath();
+      for (let l = -180; l <= 180; l += 1) {
+        const [x, y] = p.f(l, 0);
+        const px = RAHMEN.nachX(x), py = RAHMEN.nachY(y);
+        l === -180 ? g.moveTo(px, py) : g.lineTo(px, py);
+      }
+      g.stroke();
+    }
+
+    // Tissot-Indikatrizen
+    if (zeigeTissot) {
+      const grad = 30;
+      for (let b = -60; b <= 60; b += grad) {
+        for (let l = -150; l <= 150; l += grad) {
+          const v = verzerrung(p.f, l, b);
+          if (!v) continue;
+          const [x, y] = p.f(l, b);
+          if (!isFinite(x) || !isFinite(y)) continue;
+          const px = RAHMEN.nachX(x), py = RAHMEN.nachY(y);
+          const norm = 0.09 * RAHMEN.skala;       // gleiche Kugelfläche für alle
+          g.save();
+          g.translate(px, py);
+          g.rotate(-v.winkel);
+          g.beginPath();
+          g.ellipse(0, 0, Math.min(60, v.gross * norm), Math.min(60, v.klein * norm), 0, 0, Math.PI * 2);
+          const treu = v.omega < 0.5;
+          g.strokeStyle = treu ? F("--treu").trim() : F("--winkel").trim();
+          g.lineWidth = 1.6;
+          g.fillStyle = (treu ? F("--treu").trim() : F("--winkel").trim()) + "22";
+          g.fill(); g.stroke();
+          g.restore();
+        }
+      }
+    }
+
+    // Marke am gemessenen Punkt
+    {
+      const b = Math.max(-p.grenze, Math.min(p.grenze, ZEIGER.b));
+      const [x, y] = p.f(ZEIGER.l, b);
+      if (isFinite(x) && isFinite(y)) {
+        const px = RAHMEN.nachX(x), py = RAHMEN.nachY(y);
+        g.strokeStyle = F("--tinte").trim(); g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(px - 7, py); g.lineTo(px + 7, py);
+        g.moveTo(px, py - 7); g.lineTo(px, py + 7); g.stroke();
+      }
+    }
+
+    $("karten-name").textContent = p.name;
+    $("karten-lage").textContent = p.art;
+    $("steckbrief").innerHTML = "<b>" + p.name + "</b> — " + p.text;
+    vergleichFuellen();
+    messenOrt();
+  }
+
+  /* Landmassen: gezeichnete gegen tatsächliche Größe, jeweils relativ zu Afrika.
+     Flächen in Millionen km², Breite = grobe Mitte der Landmasse. */
+  const LANDMASSEN = [
+    { name: "Grönland",   km2: 2.17,  b: 72 },
+    { name: "Afrika",     km2: 30.37, b: 1 },
+    { name: "Australien", km2: 7.69,  b: -25 },
+    { name: "Indien",     km2: 3.29,  b: 22 },
+    { name: "Skandinavien", km2: 1.32, b: 63 }
+  ];
+
+  function vergleichFuellen() {
+    const p = PROJEKTIONEN[AKTUELL];
+    const tb = $("vergleich").querySelector("tbody");
+    tb.textContent = "";
+    const afrika = LANDMASSEN.find((m) => m.name === "Afrika");
+    const vAfrika = verzerrung(p.f, 0, afrika.b);
+    if (!vAfrika) return;
+    const bezug = afrika.km2 * vAfrika.flaeche;
+    for (const m of LANDMASSEN) {
+      if (Math.abs(m.b) > p.grenze) continue;
+      const v = verzerrung(p.f, 0, m.b);
+      if (!v) continue;
+      const gezeichnet = m.km2 * v.flaeche / bezug;
+      const echt = m.km2 / afrika.km2;
+      const schief = gezeichnet / echt > 2;
+      const zahl = (x) => (x >= 1 ? x.toFixed(2) : x.toFixed(3));
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + m.name + "</td>" +
+        "<td class='z " + (schief ? "schlecht" : "") + "'>" + zahl(gezeichnet) + " ×</td>" +
+        "<td class='z gut'>" + zahl(echt) + " ×</td>";
+      tb.append(tr);
+    }
+  }
+
+  /* ===================== Messen am Zeiger ===================== */
+  function ortFinden(px, py) {
+    // Umkehrung numerisch: das Gitter grob absuchen, dann verfeinern
+    const p = PROJEKTIONEN[AKTUELL];
+    let besterL = 0, besterB = 0, beste = Infinity;
+    for (let b = -p.grenze; b <= p.grenze; b += 2) {
+      for (let l = -180; l <= 180; l += 2) {
+        const [x, y] = p.f(l, b);
+        if (!isFinite(x) || !isFinite(y)) continue;
+        const d = Math.hypot(RAHMEN.nachX(x) - px, RAHMEN.nachY(y) - py);
+        if (d < beste) { beste = d; besterL = l; besterB = b; }
+      }
+    }
+    for (let schritt = 1; schritt > 0.02; schritt /= 2) {
+      for (const [dl, db] of [[schritt,0],[-schritt,0],[0,schritt],[0,-schritt]]) {
+        const l = besterL + dl, b = Math.max(-p.grenze, Math.min(p.grenze, besterB + db));
+        const [x, y] = p.f(l, b);
+        if (!isFinite(x) || !isFinite(y)) continue;
+        const d = Math.hypot(RAHMEN.nachX(x) - px, RAHMEN.nachY(y) - py);
+        if (d < beste) { beste = d; besterL = l; besterB = b; }
+      }
+    }
+    return beste < 40 ? { l: besterL, b: besterB } : null;
+  }
+
+  function messen(px, py) {
+    const ort = ortFinden(px, py);
+    if (!ort) return;
+    ZEIGER = ort;
+    messenOrt();
+    zeichnen();
+  }
+
+  function messenOrt() {
+    const p = PROJEKTIONEN[AKTUELL];
+    const ort = { l: ZEIGER.l, b: Math.max(-p.grenze, Math.min(p.grenze, ZEIGER.b)) };
+    const v = verzerrung(p.f, ort.l, ort.b);
+    if (!v) return;
+    const himmel = (ort.b >= 0 ? "N" : "S"), seite = (ort.l >= 0 ? "O" : "W");
+    $("w-ort").textContent = Math.abs(ort.b).toFixed(0) + "° " + himmel + "  " + Math.abs(ort.l).toFixed(0) + "° " + seite;
+    const fl = $("w-flaeche");
+    fl.textContent = v.flaeche.toFixed(2) + " ×";
+    fl.className = "n " + (Math.abs(v.flaeche - 1) < 0.02 ? "treu" : "gross");
+    const wi = $("w-winkel");
+    wi.textContent = v.omega.toFixed(1) + "°";
+    wi.className = "n " + (v.omega < 0.5 ? "treu" : "schief");
+    $("w-hk").textContent = v.skalaOW.toFixed(2) + " · " + v.skalaNS.toFixed(2);
+  }
+
+  /* ===================== Prüfung ===================== */
+  function pruefen() {
+    const tb = $("pruef").querySelector("tbody");
+    tb.textContent = "";
+    let fehler = 0;
+    const zeile = (was, gut, text) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + was + "</td><td style='color:" + (gut ? "var(--treu)" : "var(--flaeche)") + "'>" + text + "</td>";
+      tb.append(tr);
+      if (!gut) fehler++;
+    };
+
+    const punkte = [];
+    for (let b = -75; b <= 75; b += 5) for (let l = -170; l <= 170; l += 10) punkte.push([l, b]);
+
+    // 1. Winkeltreue: Ost-West- und Nord-Süd-Maßstab müssen gleich sein
+    let maxAbw = 0;
+    for (const [l, b] of punkte) {
+      const v = verzerrung(PROJEKTIONEN.mercator.f, l, b);
+      if (!v) continue;
+      maxAbw = Math.max(maxAbw, Math.abs(v.skalaOW - v.skalaNS) / v.skalaOW);
+    }
+    zeile("Mercator ist winkeltreu", maxAbw < 1e-4,
+      punkte.length + " Punkte, größte Abweichung " + (maxAbw * 100).toExponential(1) + " %");
+
+    // 2. Flächentreue: die Determinante muss überall 1 sein
+    for (const [schluessel, name] of [["peters", "Lambert zylindrisch"], ["mollweide", "Mollweide"]]) {
+      let maxF = 0;
+      for (const [l, b] of punkte) {
+        const v = verzerrung(PROJEKTIONEN[schluessel].f, l, b);
+        if (!v) continue;
+        maxF = Math.max(maxF, Math.abs(v.flaeche - 1));
+      }
+      zeile(name + " ist flächentreu", maxF < 1e-3,
+        "größte Abweichung " + maxF.toExponential(1) + " von 1");
+    }
+
+    // 3. Gegen die geschlossene Formel: bei Mercator ist der Maßstab sec(b)
+    let maxFormel = 0;
+    for (const b of [0, 15, 30, 45, 60, 70, 80]) {
+      const v = verzerrung(PROJEKTIONEN.mercator.f, 0, b);
+      const soll = 1 / Math.cos(b * RAD);
+      maxFormel = Math.max(maxFormel, Math.abs(v.skalaOW - soll) / soll);
+    }
+    zeile("Zahlenwerte gegen die Formel", maxFormel < 1e-6,
+      "Mercator gegen sec(φ), größte Abweichung " + (maxFormel * 100).toExponential(1) + " %");
+
+    // 4. Das Entscheidende: keine Projektion kann beides
+    let beides = [];
+    for (const [schluessel, p] of Object.entries(PROJEKTIONEN)) {
+      let winkeltreu = true, flaechentreu = true;
+      for (const [l, b] of punkte) {
+        const v = verzerrung(p.f, l, b);
+        if (!v) continue;
+        if (Math.abs(v.skalaOW - v.skalaNS) / v.skalaOW > 1e-3) winkeltreu = false;
+        if (Math.abs(v.flaeche - 1) > 1e-3) flaechentreu = false;
+        if (!winkeltreu && !flaechentreu) break;
+      }
+      if (winkeltreu && flaechentreu) beides.push(p.name);
+    }
+    zeile("Keine kann beides zugleich", beides.length === 0,
+      beides.length === 0 ? Object.keys(PROJEKTIONEN).length + " Projektionen geprüft, keine ist beides"
+                          : "unerwartet: " + beides.join(", "));
+
+    // 5. Die Umkehrung am Zeiger trifft den Ausgangspunkt wieder
+    let maxOrt = 0;
+    const p = PROJEKTIONEN[AKTUELL];
+    for (const [l, b] of [[0,0],[45,30],[-120,-45],[170,60],[-30,75]]) {
+      if (Math.abs(b) > p.grenze) continue;
+      const [x, y] = p.f(l, b);
+      const ort = ortFinden(RAHMEN.nachX(x), RAHMEN.nachY(y));
+      if (!ort) { maxOrt = 999; break; }
+      maxOrt = Math.max(maxOrt, Math.abs(ort.l - l), Math.abs(ort.b - b));
+    }
+    zeile("Zeiger findet den Ort zurück", maxOrt < 1.5,
+      "größte Abweichung " + maxOrt.toFixed(2) + "° auf " + p.name);
+
+    $("pruef-fuss").textContent = fehler === 0
+      ? (punkte.length * (Object.keys(PROJEKTIONEN).length + 3)) + " Messungen, kein Widerspruch"
+      : fehler + " Prüfung(en) fehlgeschlagen.";
+  }
+
+  /* ===================== Bedienung ===================== */
+  const auswahl = $("projektion");
+  for (const [schluessel, p] of Object.entries(PROJEKTIONEN)) {
+    const o = document.createElement("option");
+    o.value = schluessel; o.textContent = p.name + " — " + p.art;
+    auswahl.append(o);
+  }
+  auswahl.value = AKTUELL;
+  auswahl.addEventListener("change", () => { AKTUELL = auswahl.value; zeichnen(); });
+
+  const schalter = (id, lesen, setzen) => {
+    $(id).addEventListener("click", () => {
+      setzen(!lesen());
+      $(id).setAttribute("aria-pressed", String(lesen()));
+      zeichnen();
+    });
+  };
+  schalter("b-tissot", () => zeigeTissot, (v) => zeigeTissot = v);
+  schalter("b-farbe", () => zeigeFarbe, (v) => zeigeFarbe = v);
+  schalter("b-netz", () => zeigeNetz, (v) => zeigeNetz = v);
+
+  $("karte").addEventListener("pointermove", (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (e.currentTarget.width / r.width);
+    const py = (e.clientY - r.top) * (e.currentTarget.height / r.height);
+    messen(px, py);
+  });
+  $("b-pruefen").addEventListener("click", pruefen);
+  $("b-thema").addEventListener("click", () => {
+    const jetzt = document.documentElement.getAttribute("data-theme");
+    const dunkel = matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", jetzt ? (jetzt === "dark" ? "light" : "dark") : (dunkel ? "light" : "dark"));
+    zeichnen();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", zeichnen);
+
+  zeichnen();
+})();
+</script>
+</body>
+</html>
