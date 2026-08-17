@@ -106,6 +106,11 @@ Canvas 2D, reines JavaScript, hell und dunkel.
 - [Zeitsprung](https://github.com/ssims437/zeitsprung) — Zeitzonen und Sommerzeit
 - [Gradtage](https://github.com/ssims437/gradtage) — 41 Jahre Heiz- und Kühlgradtage
 - [Stimmführung](https://github.com/ssims437/stimmfuehrung) — Akkorde zu MIDI mit geführten Stimmen
+- [Handschlag](https://github.com/ssims437/handschlag) — elliptische Kurven und der Schlüsseltausch
+- [Wegewahl](https://github.com/ssims437/wegewahl) — Dijkstra, A* und der Preis des Suchens
+- [Frequenzgang](https://github.com/ssims437/frequenzgang) — FFT, Fensterfunktionen und der Leckeffekt
+- [Indexbaum](https://github.com/ssims437/indexbaum) — B+-Baum mit gezählten Seitenzugriffen
+- [Auszählung](https://github.com/ssims437/auszaehlung) — Wahlverfahren und Sitzverteilung
 
 ## Lizenz
 
